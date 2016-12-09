@@ -1,4 +1,5 @@
 public class PrintNew {
+	/* driver for the other classes */
 	/* measured in characters; adjust to fit your screen */
 	private static int screenWidth = 80;
 	private static int screenHeight = 21;
