@@ -1,36 +1,99 @@
-#include "generator.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/random.h>
+#include <string.h>
+#include <stdbool.h>
+#include <getopt.h>
+#include <unistd.h>
+
+const int BASE = 10;
+
+enum char_type {
+	LOWERCASE = 0,
+	CAPITAL,
+	DIGIT
+};
+
+const unsigned int RNG_CAPACITY = 32u;
+struct random_generator {
+	unsigned long array[RNG_CAPACITY];
+	unsigned int index;
+};
+
+char *random_sequence(unsigned int length, unsigned int capitals, unsigned int digits);
+enum char_type *permute_char_types(unsigned int length, unsigned int capitals, unsigned int digits);
+char random_char(enum char_type type);
+int random_element(int *array, int size);
+int random_int(unsigned int range);
+void initialize_rng();
+void set_intopt(char *str, unsigned int *ptr);
+void set_fopt(char *str, FILE **ptr);
+
+struct random_generator rng;
 
 int main(int argc, char **argv)
 {
-	int length;
-	int capitals;
-	int digits;
+	unsigned int number;
+	unsigned int length;
+	unsigned int capitals;
+	unsigned int digits;
+	char *string;
+	int i;
+	int c;
+	bool help;
+	extern char *optarg;
+	FILE *outfile;
 	/*
-	 * checks number and validity of arguments
+	 * reads command line arguments
 	 */
-	if (argc != 4) {
-		puts("please give length, number of capitals, and number of digits in that order");
-		return 0;
+	number = 1u;
+	length = 16u;
+	capitals = 1u;
+	digits = 1u;
+	outfile = stdout;
+	help = false;
+	while ((c = getopt(argc, argv, "n:l:c:d:o:h")) != -1) {
+		switch (c) {
+		case 'n':
+			set_intopt(optarg, &number);
+			break;
+		case 'l':
+			set_intopt(optarg, &length);
+			break;
+		case 'c':
+			set_intopt(optarg, &capitals);
+			break;
+		case 'd':
+			set_intopt(optarg, &digits);
+			break;
+		case 'o':
+			set_fopt(optarg, &outfile);
+			break;
+		case 'h':
+			help = true;
+		/* we will let getopt() deal with error cases */
+		}
 	}
-	length = atoi(argv[1]);
-	capitals = atoi(argv[2]);
-	digits = atoi(argv[3]);
-	if (length < 1 || capitals < 0 || digits < 0) {
-		puts("length should be positive");
-		puts("numbers of capitals and digits should be positive");
-		return 0;
+	if (help) {
+		fprintf(stderr, "see readme for details\n");
+	} else {
+		initialize_rng();
+		if (capitals + digits > length) {
+			length = capitals + digits;
+		}
+		for (i = 0; i < number; i++) {
+			string = random_sequence(length, capitals, digits);
+			fprintf(outfile, "%s\n", string);
+			free(string);
+		}
 	}
-	if (length < capitals + digits) {
-		puts("length should be at least the sum of the number of the capitals and the number of digits");
-		return 0;
+	if (outfile != stdout) {
+		fclose(outfile);
 	}
-	char *string = random_sequence(length, capitals, digits);
-	printf("%s\n", string);
-	free(string);
 	return 0;
 }
 
-char *random_sequence(int length, int capitals, int digits)
+char *random_sequence(unsigned int length, unsigned int capitals, unsigned int digits)
 {
 	int i;
 	enum char_type *types;
@@ -50,7 +113,7 @@ char *random_sequence(int length, int capitals, int digits)
 	return string;
 }
 
-enum char_type *permute_char_types(int length, int capitals, int digits)
+enum char_type *permute_char_types(unsigned int length, unsigned int capitals, unsigned int digits)
 {
 	int i;
 	int size;
@@ -85,14 +148,14 @@ char random_char(enum char_type type)
 	 */
 	switch (type) {
 	case LOWERCASE:
-		return random_int(26) + 97;
+		return random_int(26) + 'a';
 	case CAPITAL:
-		return random_int(26) + 65;
+		return random_int(26) + 'A';
 	case DIGIT:
-		return random_int(10) + 48;
+		return random_int(10) + '0';
 	default:
-		printf("type %d is not defined\n", type);
-		return '?';
+		fprintf(stderr, "fatal error: type %d is not defined\n", type);
+		exit(EXIT_FAILURE);
 	}
 }
 
@@ -100,10 +163,8 @@ int random_element(int *array, int size) {
 	int random_index;
 	int random_element;
 	/*
-	 * returns a random element of the array
-	 * the element is removed from the array
-	 * the caller function is responsible for
-	 * decrementing the size of the array
+	 * returns a random element of the array, which is removed from the array
+	 * the caller function is responsible for decrementing the size of the array
 	 */
 	random_index = random_int(size);
 	random_element = array[random_index];
@@ -111,17 +172,43 @@ int random_element(int *array, int size) {
 	return random_element;
 }
 
-int random_int(int range)
+int random_int(unsigned int range)
 {
-	unsigned long buffer;
 	/*
 	 * produces a random integer x such that
 	 * 0 <= x < range
 	 */
-	if (getrandom(&buffer, sizeof(unsigned long), 0) !=
-			sizeof(unsigned long)) {
-		puts("failed to retrieve random bytes");
-		return 0;
+	if (rng.index >= RNG_CAPACITY) {
+		if (getrandom(rng.array, sizeof(rng.array), 0u) != sizeof(rng.array)) {
+			fprintf(stderr, "fatal error: unable to retrieve random bytes\n");
+			exit(EXIT_FAILURE);
+		}
+		rng.index = 0;
 	}
-	return buffer % range;
+	return rng.array[rng.index++] % range;
+}
+
+void initialize_rng() {
+	rng.index = RNG_CAPACITY;
+}
+
+void set_intopt(char *str, unsigned int *ptr) {
+	int optval;
+	optval = strtoul(str, (char **) NULL, BASE);
+	if (optval) {
+		*ptr = optval;
+	} else {
+		fprintf(stderr, "error: unable to read positive unsigned int \"%s\"\n", str);
+	}
+}
+
+void set_fopt(char *str, FILE **ptr) {
+	FILE *optval;
+	if (access(str, F_OK) == 0) {
+		fprintf(stderr, "error: file \"%s\" already exists\n", str);
+	} else if ((optval = fopen(str, "w"))) {
+		*ptr = optval;
+	} else {
+		fprintf(stderr, "error: unable to open file \"%s\"\n", str);
+	}
 }
