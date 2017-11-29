@@ -14,22 +14,14 @@ enum char_type {
 	DIGIT
 };
 
-const unsigned int RNG_CAPACITY = 32u;
-struct random_generator {
-	unsigned long array[RNG_CAPACITY];
-	unsigned int index;
-};
-
 char *random_sequence(unsigned int length, unsigned int capitals, unsigned int digits);
 enum char_type *permute_char_types(unsigned int length, unsigned int capitals, unsigned int digits);
 char random_char(enum char_type type);
 int random_element(int *array, int size);
-int random_int(unsigned int range);
+unsigned char random_int(unsigned char range);
 void initialize_rng();
 void set_intopt(char *str, unsigned int *ptr);
 void set_fopt(char *str, FILE **ptr);
-
-struct random_generator rng;
 
 int main(int argc, char **argv)
 {
@@ -77,7 +69,6 @@ int main(int argc, char **argv)
 	if (help) {
 		fprintf(stderr, "see readme for details\n");
 	} else {
-		initialize_rng();
 		if (capitals + digits > length) {
 			length = capitals + digits;
 		}
@@ -172,24 +163,18 @@ int random_element(int *array, int size) {
 	return random_element;
 }
 
-int random_int(unsigned int range)
+unsigned char random_int(unsigned char range)
 {
 	/*
 	 * produces a random integer x such that
 	 * 0 <= x < range
 	 */
-	if (rng.index >= RNG_CAPACITY) {
-		if (getrandom(rng.array, sizeof(rng.array), 0u) != sizeof(rng.array)) {
-			fprintf(stderr, "fatal error: unable to retrieve random bytes\n");
-			exit(EXIT_FAILURE);
-		}
-		rng.index = 0;
+	unsigned short buffer;
+	if (getrandom(&buffer, sizeof(buffer), 0u) != sizeof(buffer)) {
+		fprintf(stderr, "fatal error: unable to retrieve random bytes\n");
+		exit(EXIT_FAILURE);
 	}
-	return rng.array[rng.index++] % range;
-}
-
-void initialize_rng() {
-	rng.index = RNG_CAPACITY;
+	return (buffer % range);
 }
 
 void set_intopt(char *str, unsigned int *ptr) {
